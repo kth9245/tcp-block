@@ -79,7 +79,7 @@ uint16_t checksum(void* packet, int len) {
         sum += *buf++;
     }
     if (len == 1) {
-        sum += *(uint8_t*)packet;
+        sum += (*(uint8_t*)packet);
     }
     sum = (sum >> 16) + (sum & 0xFFFF);
     sum += (sum >> 16);
@@ -135,8 +135,8 @@ void send_warning(tcp_packet* origin, pcap_t* handle){
 	int ethlen = 14;
 	int iplen = 4*origin->ip.ip_hl;
 	int tcplen = 4*(origin->tcp.off >> 4);
-	const char warning[] = "HTTP/1.0 302 Redirect\r\nLocation: http://warning.or.kr\r\n\r\n";
-	tcp_packet* warn_packet = (tcp_packet*)malloc(ethlen + iplen + tcplen + strlen(warning));
+	const char warning[] = "HTTP/1.0 302 Redirect\r\nLocation: http://warning.or.kr\r\n\r\n ";
+	tcp_packet* warn_packet = (tcp_packet*)calloc(1, ethlen + iplen + tcplen + strlen(warning));
 	memcpy(warn_packet, origin, ethlen + iplen + tcplen);
 	memcpy((unsigned char*)(warn_packet)+ sizeof(tcp_packet), warning, strlen(warning));
 
@@ -161,18 +161,17 @@ void send_warning(tcp_packet* origin, pcap_t* handle){
 	warn_packet->tcp.th_urp = 0;
 
 	pseudo_hdr psh;
-	psh.src = warn_packet->ip.ip_dst;
-    psh.dst = warn_packet->ip.ip_src;
+	psh.src = warn_packet->ip.ip_src;
+    psh.dst = warn_packet->ip.ip_dst;
     psh.zero = 0;
-    psh.protocol = IPPROTO_TCP;
+    psh.protocol = 6;
     psh.tcp_length = htons(sizeof(libnet_tcp_hdr) + strlen(warning));
 	int psize = sizeof(pseudo_hdr) + sizeof(libnet_tcp_hdr) + strlen(warning);
-	unsigned char *pseudo = (unsigned char*)calloc(1, psize);
-	memcpy(pseudo, (char *)&psh, sizeof(pseudo_hdr));
-    memcpy(pseudo + sizeof(pseudo_hdr), &(warn_packet->tcp), sizeof(libnet_tcp_hdr) + strlen(warning));
+	unsigned char *pseudo = (unsigned char*)malloc(psize);
+	memcpy(pseudo, (unsigned char *)&psh, sizeof(pseudo_hdr));
+    memcpy(pseudo + sizeof(pseudo_hdr), (unsigned char*)(warn_packet) + ethlen + iplen, sizeof(libnet_tcp_hdr) + strlen(warning));
 	
-    warn_packet->tcp.th_sum = (checksum((unsigned char*)pseudo, psize));
-
+    warn_packet->tcp.th_sum = checksum((unsigned char*)pseudo, psize);
 	//int res = pcap_sendpacket(handle, (u_char*)warn_packet, sizeof(EthHdr) + ntohs(warn_packet->ip.ip_len));
 	//if (res == -1) fprintf(stderr, "Error sending packet: %s\n", pcap_geterr(handle));
 	
@@ -209,7 +208,7 @@ int main(int argc, char* argv[]) {
 	}
 	my_mac[17] = '\0'; 
 
-	pcap_t* handle = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
+	pcap_t* handle = pcap_open_live(dev, BUFSIZ, 1, 10, errbuf);
 	if (handle == nullptr) {
 				printf("couldn't open device %s(%s)\n", dev, errbuf);
 	}		
@@ -237,7 +236,6 @@ int main(int argc, char* argv[]) {
 					send_rst(origin, handle);
 					send_warning(origin, handle);
 					printf("Send Packet\n");
-					sleep(10);
 				}
 			}
 		}
